@@ -1,0 +1,305 @@
+// Known commands for JVC KD-R531:
+//   HEX   DEC  BIN(7b)  FUNCTION
+//   0x04    4  0000100  Volume +
+//   0x05    5  0000101  Volume -
+//   0x08    8  0001000  Source cycle
+//   0x0D   13  0001101  Equalizer preset cycle
+//   0x0E   14  0001110  Mute toggle / Play/pause toggle
+//   0x12   18  0010010  Tuner Search + / Track + (and Manual Tune + / Fast Forward with press & hold)
+//   0x13   19  0010011  Tuner Search - / Track - (and Manual Tune - / Fast Rewind with press & hold)
+//   0x14   20  0010100  Tuner Preset + / USB Folder +
+//   0x15   21  0010101  Tuner Preset - / USB Folder -
+//   0x37   55  0110111  UNKNOWN, appears to be a sort of reset as well as a display test
+//   0x58   88  1011000  UNKNOWN, displays 'SN WRITING' where WRITING is blinking
+
+int PIN = 9;          // Digital IO pin connected to base of transistor
+int Length = 537;     // Length in Microseconds
+int IncomingByte = 0; // Initialize Serial Buffer
+int Reps = 3;         // Number of times to repeat each transmission
+
+// Коды имеющихся на руле кнопок
+const int VOL_UP=1;
+const int VOL_DN=2;
+const int PREV_TR=3;
+const int NEXT_TR=4;
+const int MODE=5;
+const int MUTE=6;
+const int FOLDER_DOWN=7;
+const int FOLDER_UP=8;
+
+int wheelPin=A2; // аналоговый пин, на котором мы считываем сопротивление нажатой на руле кнопки
+int wheelMod=12; // цифровой пин, на котором считываем состояние кнопки Mode
+
+int i=0;
+int prevButton=0;
+
+unsigned long  pressedTime; // Время нажатия кнопки
+
+void setup() {
+  pinMode(wheelPin, INPUT);  //set pin A2 as INPUT 
+  pinMode(wheelMod, INPUT);  //set pin 12 as INPUT 
+  pinMode(PIN, OUTPUT); // Set pin to output
+  digitalWrite(PIN, LOW); // Make PIN low to shut off transistor
+
+  //Serial.begin(9600);
+
+}
+
+int getR() { // Эта функция читает сопротивление с кнопок на руле и возвращает код нажатой кнопки, либо 0
+
+  // читаем сопротивление (на самом деле напряжение, конечно) на аналоговом пине
+  int r = analogRead(wheelPin);
+
+//  Serial.println(r);
+
+  // Ищем, какая кнопка соответствует этому сопротивлению. 
+  // Данные значения сопротивлений подходят для Toyota, для других автомобилей числа будут другие.
+  if (r>=235 && r<=245) return(VOL_UP); // 240
+  if (r>=496 && r<=506) return(VOL_DN); // 501
+  if (r>=88 && r<=98) return(PREV_TR); // 93
+  if (r>=0 && r<=5) return(NEXT_TR); // 0
+
+  // если ни одна из кнопок на пине wheelPin не нажата, проверяем нажата ли кнопка Mode
+     r = digitalRead(wheelMod);
+     if (r == LOW) return(MODE);
+
+  // если ни одна из кнопок не нажата, возвращаем 0
+  return (0);
+}
+
+void loop() { 
+ int currButton=getR(); // заносим в переменную currButton код нажатой кнопки
+  if (currButton!=prevButton) { // если значение поменялось с прошлого раза
+
+    delay(10);
+    currButton=getR(); // ждем 10ms и читаем еще раз, чтобы исключить "дребезг" кнопки
+
+    if (currButton!=prevButton) { // если код кнопки точно поменялся с прошлого раза
+      //Serial.println(currButton);
+
+      // если нажата PREV_TR или NEXT_TR или MODE, запоминаем время нажатия, но на магнитолу никакой сигнал пока не отправляем и выходим.
+      if (currButton==PREV_TR || currButton==NEXT_TR || currButton == MODE) {
+         pressedTime=millis();
+         prevButton=currButton;
+         return;
+      }
+
+      // Если отжата PREV_TR, смотрим, сколько времени она удерживалась - больше или меньше 3 секунд. 
+      // В зависимости от этого времени меняем значение currButton на FOLDER_UP или PREV_TR
+      if (currButton==0 && prevButton==PREV_TR  && pressedTime>0) {
+        if ((millis()-pressedTime)>3000) currButton=FOLDER_DOWN;
+        else currButton=PREV_TR;
+        pressedTime=0; // обнуляем таймер, чтобы при следующем выполении цикла loop эти проверки не сработали повторно.
+      }
+
+      // то же самое если отжата NEXT_TR
+      if (currButton==0 && prevButton==NEXT_TR && pressedTime>0) {
+        if ((millis()-pressedTime)>3000) currButton=FOLDER_UP;
+        else currButton=NEXT_TR;
+        pressedTime=0;
+      }
+
+      // то же самое если отжата MODE
+      if (currButton==0 && prevButton==MODE && pressedTime>0) {
+        if ((millis() - pressedTime) > 3000) currButton = MUTE;
+        else currButton = MODE;
+        pressedTime = 0;
+      }
+
+      prevButton=currButton;     // сохраняем новое значение в переменную prevButton
+
+      switch(currButton) {
+       case VOL_UP: JVCVolUp(); break;  
+       case VOL_DN: JVCVolDn(); break;  
+       case PREV_TR: JVCSkipBack(); break; 
+       case NEXT_TR: JVCSkipFwd(); break;  
+       case FOLDER_DOWN: JVCSkipBackHold(); break; 
+       case FOLDER_UP: JVCSkipFwdHold(); break;  
+       case MODE: JVCSource(); break;
+       case MUTE: JVCMute(); break;
+
+       default: break; 
+     }
+   }
+  }
+  delay(5);
+
+}
+
+void JVCVolUp() {      // Send 0x04
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bZERO();
+    bONE();    // 4 
+    bZERO();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCVolDn() {      // Send 0x05
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bONE();
+    bZERO();
+    bONE();    // 5 
+    bZERO();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSource() {      // Send 0x08
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bZERO();
+    bZERO();    // 8 
+    bONE();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCMute() {      // Send 0x0E
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bONE();
+    bONE();    // E (14) 
+    bONE();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipFwd() {      // Send 0x12
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bONE();
+    bZERO();    // 2 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipBack() {      // Send 0x13
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bONE();
+    bONE();
+    bZERO();    // 3 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipFwdHold() {      // Send 0x14
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bZERO();
+    bONE();    // 4 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipBackHold() {      // Send 0x15
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bONE();
+    bZERO();
+    bONE();    // 5 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void bONE() {                     // Send a binary ONE over the line
+  digitalWrite(PIN, HIGH);        // Pull 3.5mm TIP low
+  delayMicroseconds(Length);      // for 537us
+  digitalWrite(PIN, LOW);         // Allow 3.5mm TIP to go high
+  delayMicroseconds(Length * 3);  // for 537 * 3 = 1611us
+}
+
+
+void bZERO() {                    // Send a binary ZERO over the line
+  digitalWrite(PIN, HIGH);        // Pull 3.5mm TIP low
+  delayMicroseconds(Length);      // for 537us
+  digitalWrite(PIN, LOW);         // Allow 3.5mm TIP to go high
+  delayMicroseconds(Length);      // for 537us
+}
+
+void Preamble() {
+  digitalWrite(PIN, LOW);         // Not sure what this does
+  delayMicroseconds(Length * 1);
+
+  digitalWrite(PIN, HIGH);        // AGC
+  delayMicroseconds(Length * 16);
+
+  digitalWrite(PIN, LOW);         // AGC
+  delayMicroseconds(Length * 8);
+
+  bONE();    // 1 Start Bit
+
+  bONE();    //       (7 bit device code)
+  bONE();
+  bONE();    // 7
+  bZERO();
+
+  bZERO();
+  bZERO();    //4
+  bONE();
+}
+
+void Postamble() {
+  bONE();
+  bONE();    // 2 stop bits
+}

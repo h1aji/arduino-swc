@@ -1,0 +1,87 @@
+
+// библиотека SPI должна быть в стандартном софте, ну или её можно скачать
+#include <SPI.h>
+
+// Коды имеющихся на руле кнопок
+const int VOL_UP=1;
+const int VOL_DN=2;
+const int PREV_TR=3;
+const int NEXT_TR=4;
+const int MODE=5;
+
+int csPin=10; // CS на цифровом потенциометре
+
+int wheelPin=A2; // аналоговый пин, на котором мы считываем сопротивление нажатой на руле кнопки
+int wheelMod=12; // цифровой пин, на котором считываем состояние кнопки Mode
+
+int i=0;
+int prevButton=0;
+
+void setup() {
+  pinMode(csPin, OUTPUT);
+  delay(50);
+
+  SPI.begin();
+  delay(50);
+  SPI.transfer(0); // команда
+  SPI.transfer(0); // значение
+
+  pinMode(wheelPin, INPUT);
+  pinMode(wheelMod, INPUT);
+
+  delay(100);
+  //Serial.begin(9600);
+
+}
+
+int getR() { // Эта функция читает сопротивление с кнопок на руле и возвращает код нажатой кнопки, либо 0
+
+  // читаем сопротивление (на самом деле напряжение, конечно) на аналоговом пине
+  int r=analogRead(wheelPin);
+
+  //Serial.println(r);
+
+  // Ищем, какая кнопка соответствует этому сопротивлению. 
+  // Данные значения сопротивлений подходят для TOYOTA, для других автомобилей числа будут другие.
+  if (r>=220 && r<=280) return(VOL_UP); // 220-280
+  if (r>=470 && r<=540) return(VOL_DN); // 470-540
+  if (r>=70 && r<=130) return(PREV_TR); // 70-130
+  if (r>=0 && r<=40) return(NEXT_TR); // 0-40
+
+  // если ни одна из кнопок на пине wheelPin не нажата, проверяем нажата ли кнопка Mode
+     r=digitalRead(wheelMod);
+     if (r==LOW) return(MODE);
+
+  // если и Mode не нажата, то возвращаем 0
+     return (0);
+}
+
+// ОСНОВНОЙ ЦИКЛ
+void loop() {
+  int currButton=getR(); // заносим в переменную currButton код нажатой кнопки
+  if (currButton!=prevButton) { // если значение поменялось с прошлого раза
+
+    delay(10);
+    currButton=getR(); // ждем 10ms и читаем еще раз, чтобы исключить "дребезг" кнопки
+
+    if (currButton!=prevButton) { // если код кнопки точно поменялся с прошлого раза
+
+      //Serial.println(currButton);
+
+      prevButton=currButton;     // сохраняем новое значение в переменную prevButton
+
+      // Выставляем сопротивление на потенциометре, тем самым посылаем команду на магнитолу.
+      // Значения сопротивлений даны для Pioneer, для магнитол других марок числа будут другие.
+      SPI.transfer(0); 
+      switch(currButton) {
+       case VOL_UP: SPI.transfer(21); break;  // 16k
+       case VOL_DN: SPI.transfer(31); break;  // 24k   
+       case PREV_TR: SPI.transfer(14); break;  // 11k
+       case NEXT_TR: SPI.transfer(10); break;  // 8k
+       case MODE: SPI.transfer(2); break;  // 1.6k
+       default: SPI.transfer(0); break; // 0k
+     }
+   }
+  }
+  delay(5);
+}

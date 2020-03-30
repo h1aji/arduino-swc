@@ -1,0 +1,266 @@
+/*
+  JVC
+  Communicate with JVC car radio over 3.5mm Remote connector
+
+  Connect Arduino PIN to Base of NPN transistor
+  Emitter is tied to ground
+  Collector is tied to 3.5mm TIP
+  Ground 3.5mm Ring/Sleeve
+
+  By Dan Guerra (deguerra98@yahoo.com)
+  */
+
+  int PIN = 9;          // Digital IO pin connected to base of transistor
+  int Length = 537;     // Length in Microseconds
+  int IncomingByte = 0; // Initialize Serial Buffer
+  int Reps = 3;         // Number of times to repeat each transmission
+
+void setup() {
+  pinMode(PIN, OUTPUT); // Set pin to output
+  digitalWrite(PIN, LOW); // Make PIN low to shut off transistor
+  Serial.begin(9600);
+  Serial.println("1 - Volume Up");
+  Serial.println("2 - Volume Down");
+  Serial.println("3 - Source");
+  Serial.println("4 - Sound");
+  Serial.println("5 - Mute");
+  Serial.println("6 - Skip Fwd");
+  Serial.println("7 - Skip Back");
+  Serial.println("8 - Skip Fwd Hold");
+  Serial.println("9 - Skip Back Hold");
+}
+
+void loop() { 
+  if (Serial.available() > 0) {
+    IncomingByte = Serial.read();
+
+    switch (IncomingByte) {
+      case '1':
+        JVCVolUp();
+        break;
+      case '2':
+        JVCVolDn();
+        break;
+      case '3':
+        JVCSource();
+        break;
+      case '4':
+        JVCSound();
+        break;
+      case '5':
+        JVCMute();
+        break;
+      case '6':
+        JVCSkipFwd();
+        break;
+      case '7':
+        JVCSkipBack();
+        break;
+      case '8':
+        JVCSkipFwdHold();
+        break;
+      case '9':
+        JVCSkipBackHold();
+        break;
+
+      default:;
+    }
+  }
+}
+
+
+void JVCVolUp() {      // Send 0x04
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bZERO();
+    bONE();    // 4 
+    bZERO();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCVolDn() {      // Send 0x05
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bONE();
+    bZERO();
+    bONE();    // 5 
+    bZERO();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSource() {      // Send 0x08
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bZERO();
+    bZERO();    // 8 
+    bONE();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSound() {      // Send 0x0D
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bONE();
+    bZERO();
+    bONE();    // D (13) 
+    bONE();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCMute() {      // Send 0x0E
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bONE();
+    bONE();    // E (14) 
+    bONE();
+
+    bZERO();
+    bZERO();   // 0
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipFwd() {      // Send 0x12
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bONE();
+    bZERO();    // 2 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipBack() {      // Send 0x13
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bONE();
+    bONE();
+    bZERO();    // 3 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipFwdHold() {      // Send 0x14
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bZERO();
+    bZERO();
+    bONE();    // 4 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+void JVCSkipBackHold() {      // Send 0x15
+  for (int i = 1; i <= Reps; i++); {
+    Preamble();
+
+    bONE();
+    bZERO();
+    bONE();    // 5 
+    bZERO();
+
+    bONE();
+    bZERO();   // 1
+    bZERO();
+
+    Postamble();
+  }
+}
+
+
+void bONE() {                     // Send a binary ONE over the line
+  digitalWrite(PIN, HIGH);        // Pull 3.5mm TIP low
+  delayMicroseconds(Length);      // for 537us
+  digitalWrite(PIN, LOW);         // Allow 3.5mm TIP to go high
+  delayMicroseconds(Length * 3);  // for 537 * 3 = 1611us
+}
+
+
+void bZERO() {                    // Send a binary ZERO over the line
+  digitalWrite(PIN, HIGH);        // Pull 3.5mm TIP low
+  delayMicroseconds(Length);      // for 537us
+  digitalWrite(PIN, LOW);         // Allow 3.5mm TIP to go high
+  delayMicroseconds(Length);      // for 537us
+}
+
+void Preamble() {
+  digitalWrite(PIN, LOW);         // Not sure what this does
+  delayMicroseconds(Length * 1);
+
+  digitalWrite(PIN, HIGH);        // AGC
+  delayMicroseconds(Length * 16);
+
+  digitalWrite(PIN, LOW);         // AGC
+  delayMicroseconds(Length * 8);
+
+  bONE();    // 1 Start Bit
+
+  bONE();    //       (7 bit device code)
+  bONE();
+  bONE();    // 7
+  bZERO();
+
+  bZERO();
+  bZERO();    //4
+  bONE();
+}
+
+void Postamble() {
+  bONE();
+  bONE();    // 2 stop bits
+}
